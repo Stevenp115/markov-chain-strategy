@@ -7,7 +7,7 @@ A simple Markov Chain strategy backtester in Python. The actual performance is s
 * [NumPy](https://numpy.org/)
 
 ## Usage
-To find the Markov Chain for a given `ticker`, then we can do the following:
+To find the Markov Chain transition matrix for a given `ticker`, then we can do the following:
 ```python
 from markov_test import markov
 
