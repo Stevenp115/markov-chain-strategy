@@ -35,3 +35,8 @@ from markov_test import *
 monte_carlo(ticker1, 1000, True, 3, initial_size=100, train_prop=0.75, buy_fee=0.005, sell_fee=0.005)
 
 ```
+
+## To Add
+* 3x3 Markov Chain (include a 'stagnant' event).
+* User-defined Markov Chain states.
+* Higher-memory markov chains.
