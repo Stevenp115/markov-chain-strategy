@@ -5,67 +5,6 @@ import matplotlib.pyplot as plt
 from collections import defaultdict as dd
 
 
-# Markov chain gen.
-def markov(tickers, perf=False):
-    '''
-    Returns a tuple of dictionaries containing 2x2 numpy arrays containing
-    (i) the number of times each event pair occured and (ii) the markov chain.
-    
-        Parameters:
-            tickers (list or dict): Either a list of tickers, or a dictionary of ticker:price data.
-            (Optional) perf (bool): If 'True', the computation time is printed.
-    '''
-
-    if perf:
-        start = time.perf_counter()
-
-    # If the 'tickers' are given as a list, generate the ticker data.
-    if isinstance(tickers, list):
-        tickers = import_ticker_data(tickers)
-
-    # Initialise the return dictionaries.
-    occurences_dict = {}
-    markov_chain_dict = {}
-
-    for ticker in tickers:
-        data = tickers[ticker]  # Stores price data for the ticker.
-        occurences = np.zeros((2, 2))  # Initilialise the markov chain.
-
-        for i in range(2, len(data)):
-            prev_jump = data[i - 1] - data[i - 2]
-            curr_jump = data[i] - data[i - 1]
-
-            # Increment the occurences depending on the event-pair.
-            if prev_jump > 0:
-                if curr_jump > 0:
-                    occurences[0, 0] += 1
-                else:
-                    occurences[0, 1] += 1
-            else:
-                if curr_jump < 0:
-                    occurences[1, 1] += 1
-                else:
-                    occurences[1, 0] += 1
-
-        markov_chain = occurences.copy()
-        row_sums = sum(np.transpose(occurences))  # Takes the sum of each row.
-        for i in range(np.shape(occurences)[0]):
-            for j in range(np.shape(occurences)[1]):
-                # Replace with conditional probability.
-                markov_chain[i, j] /= row_sums[i]
-
-        # Store these numpy arrays to the dictionaries.
-        occurences_dict[ticker] = occurences
-        markov_chain_dict[ticker] = markov_chain
-
-    if perf:
-        finish = time.perf_counter()
-        print(f"Computation time: {round(finish - start, 4)} sec")
-        return occurences_dict, markov_chain_dict
-
-    return occurences_dict, markov_chain_dict
-
-
 # Optional ticker pre-import.
 def import_ticker_data(ticker_list, min_time=-1, perf=False):
     ''' 
@@ -99,8 +38,8 @@ def import_ticker_data(ticker_list, min_time=-1, perf=False):
 # Testing function.
 
 
-def markov_strat(ticker_data, initial_size, train_prop=0.75, buy_fee=0,
-                 sell_fee=0, perf=False):
+def markov_strat(ticker_data, initial_size, memory= 2, train_prop=0.75, 
+                 buy_fee=0, sell_fee=0, perf=False):
     ''' 
     Returns final account balance, percentage profit, and account balance data
     for a selection of tickers, using a Markov Chain strategy.
@@ -108,6 +47,7 @@ def markov_strat(ticker_data, initial_size, train_prop=0.75, buy_fee=0,
         Parameters:
             ticker_data (dict): ticker:historical_price_data pairs.
             initial_size (float): Initial portfolio size (in dollars.)
+            (Optional) memory (int): The amount of memory for the markov chain.
             (Optional) train_prop (float, 0-1): Proportion of data to be used for training.
             (Optional) buy_fee (float): The proportional buy fee, in decimal form.
             (Optional) sell_fee (float): The proportional sell fee, in decimal form.
@@ -134,7 +74,7 @@ def markov_strat(ticker_data, initial_size, train_prop=0.75, buy_fee=0,
         train_ticker_data = {ticker: train_data}
 
         # Get the markov chain only using the training data.
-        markov_chain = markov(train_ticker_data, perf=False)[1][ticker]
+        markov_chain = markov(train_ticker_data, memory=memory, perf=False)[1][ticker]
 
         # Initialise account states.
         balance = initial_size
@@ -145,21 +85,36 @@ def markov_strat(ticker_data, initial_size, train_prop=0.75, buy_fee=0,
 
             # We split the cases depending on whether there is a position.
             if not holding:
-                prior = int(test_data[i - 1] < test_data[i - 2])
+                priors = list(reversed([int(test_data[i - j] <= test_data[i - j - 1])
+                         for j in range(1, memory + 2)]))
+                
+                if memory == 0:
+                    new_prior = [0, priors[0]]
+                else:
+                    new_prior = priors[:-1] + [0] + priors[-1:]
+                    
+                # Reorder due to numpy indexing order.            
                 random_num = np.random.random()
 
                 # With probability corresponding to the Markov Chain, buy in.
-                if markov_chain[prior, 0] > random_num:
+                if markov_chain[tuple(new_prior)] > random_num:
                     holding = True
                     position = balance * (1 - buy_fee)
                     buy_price = test_data[i]
 
             else:
-                prior = int(test_data[i - 1] < test_data[i - 2])
+                priors = list(reversed([int(test_data[i - j] <= test_data[i - j - 1])
+                         for j in range(1, memory + 2)]))
+                
+                if memory == 0:
+                    new_prior = [1, priors[0]]
+                else:
+                    new_prior = priors[:-1] + [1] + priors[-1:]
+                    
                 random_num = np.random.random()
 
                 # With probability corresponding to the Markov Chain, sell.
-                if markov_chain[prior, 1] > random_num:
+                if markov_chain[tuple(new_prior)] > random_num:
                     holding = False
                     sell_price = test_data[i]
                     balance = position * \
@@ -178,6 +133,70 @@ def markov_strat(ticker_data, initial_size, train_prop=0.75, buy_fee=0,
     return final_balances, profit, hist_balance
 
 
+# Markov chain gen.
+def markov(tickers, memory=0, states=2, stag_thresh=0.002, perf=False):
+    '''
+    Returns a tuple of dictionaries containing 2x2 numpy arrays containing
+    (i) the number of times each event sequence occured and (ii) the markov chain.
+    
+        Parameters:
+            tickers (list or dict): Either a list of tickers, or a dictionary of ticker:price data.
+            (Optional) memory (int): How many prior states to keep track of. 
+            (Optional) states (+int): How many states to consider (default 2; inc./dec.)
+            (Optional) stag_thresh (float): The price change threshold for which a stock is considered stagnant.
+            (Optional) perf (bool): If 'True', the computation time is printed.
+    '''
+
+    if perf:
+        start = time.perf_counter()
+
+    # If the 'tickers' are given as a list, generate the ticker data.
+    if isinstance(tickers, list):
+        tickers = import_ticker_data(tickers)
+
+    # Initialise the return dictionaries.
+    occurences_dict = {}
+    markov_chain_dict = {}
+
+    for ticker in tickers:
+        data = tickers[ticker]  # Stores price data for the ticker.
+
+        # Initilialise the markov chain.
+        occurences = np.zeros((states,) * (2 + memory))
+        
+        for i in range(2 + memory, len(data)):
+            # Get any conditional price changes (as boolean).
+            jumps = [int(data[i - j] <= data[i - j - 1])
+                     for j in range(memory + 2)]
+            
+            # Get jumps into numpy-index-order.
+            jumps = list(reversed(jumps[2:])) + jumps[:2]
+            
+            # Increment the occurences depending on the event-pair.
+            occurences[tuple(jumps)] += 1
+
+        markov_chain = occurences.copy()
+        dim = len(np.shape(occurences))
+        # Fix the axis to sum over to be the event space.
+        axis = dim - 2
+        
+        for index in np.ndindex(np.shape(occurences)):
+            # Replace with conditional probability.   
+            slicer = [index[i] if i != axis else slice(None) for i in range(len(index))]
+            markov_chain[index] /= sum(occurences[tuple(slicer)])
+
+        # Store these numpy arrays to the dictionaries.
+        occurences_dict[ticker] = occurences
+        markov_chain_dict[ticker] = markov_chain
+
+    if perf:
+        finish = time.perf_counter()
+        print(f"Computation time: {round(finish - start, 4)} sec")
+        return occurences_dict, markov_chain_dict
+
+    return occurences_dict, markov_chain_dict
+
+    
 def graph_test_data(results, ticker):
     """
     Shows a graph of previously generated account balance data for a ticker.
@@ -227,4 +246,10 @@ def monte_carlo(ticker, trials, m_perf, rounding=-1, **kwargs):
         
     if rounding != -1:     
         return round(sum(balances) / len(balances), rounding)
+    
     return sum(balances) / len(balances)
+
+    
+# Predictor (not produced yet).
+def markov_predict():
+    pass
