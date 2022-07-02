@@ -40,3 +40,4 @@ monte_carlo(ticker1, 1000, True, 3, initial_size=100, train_prop=0.75, buy_fee=0
 * 3x3 Markov Chain (include a 'stagnant' event).
 * User-defined Markov Chain states.
 * Higher-memory markov chains.
+* Planning on making a C++ implementation for speed.
