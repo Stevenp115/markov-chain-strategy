@@ -16,7 +16,14 @@ To find the Markov Chain transition matrix for a given `ticker`, then we can do 
 ```python
 from markov_test import markov
 
-print(markov(ticker))
+print(markov([ticker]))
+```
+
+To return a Markov Chain with 2 layers of memory (the corresponding events will be **UU**UU, **UU**UD, **UU**DU, etc. instead of just UU, UD, DU, DD. Where U = upward price movement, D = downward price movement):
+```python
+from markov_test import markov
+markov([ticker1], memory=2)
+# >> Returns a 2x2x2x2 numpy array.
 ```
 
 To backtest the strategy on tickers `ticker1` and `ticker2`, assuming buy/sell fees of 0.5%, an initial portfolio size of $100, and a train-test split of 0.75, we can run the following:
@@ -39,5 +46,4 @@ monte_carlo(ticker1, 1000, True, 3, initial_size=100, train_prop=0.75, buy_fee=0
 ## To Add
 * 3x3 Markov Chain (include a 'stagnant' event).
 * User-defined Markov Chain states.
-* Higher-memory markov chains.
 * Planning on making a C++ implementation for speed.
