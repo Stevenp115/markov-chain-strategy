@@ -7,7 +7,7 @@ A simple Markov Chain stock-trading strategy backtester in Python. The actual pe
 * [NumPy](https://numpy.org/)
 
 ## Methodology
-The price data for the stocks is scraped from Yahoo Finance via the yfinance library. Then in order to generate the transition matrix of the Markov Chain, we keep track of the states "profit" and "loss" from one day to the next; these are gathered from taking iterating through the price data. The only information stored in the memory of the matrix is the state at a current time, and the previous timestep.
+The price data for the stocks is retrieved from Yahoo Finance via the yfinance library. Then in order to generate the transition matrix of the Markov Chain, we keep track of the states "profit" and "loss" from one day to the next; these are gathered from taking iterating through the price data. The information stored in the memory of the matrix is the state at a current time, the previous timestep, and an additional number of previous timesteps depending on the user-specified parameters.
 
 In the strategy, the value in the markov chain, rather than determining if the trade occurs or not, gives the probablity that a purchase/sale will be made (given the prior state).
 
